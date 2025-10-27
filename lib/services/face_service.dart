@@ -167,6 +167,9 @@ class FaceService {
 
     return output.toList();
   }
+
+
+
   Future<List<double>> getEmbedding(Uint8List imageBytes) async {
     if (_interpreter == null) {
       throw Exception('Model not initialized. Call init() first.');

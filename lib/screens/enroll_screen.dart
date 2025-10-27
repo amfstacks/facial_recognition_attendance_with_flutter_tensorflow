@@ -64,7 +64,7 @@ class _EnrollScreenState extends State<EnrollScreen> {
     setState(() {});
   }
 
-  Future<void> _enroll() async {
+  Future<void> _enroll_working_single_entry() async {
     if (_isProcessing) return;
     setState(() => _isProcessing = true);
 
@@ -97,7 +97,44 @@ class _EnrollScreenState extends State<EnrollScreen> {
       setState(() => _isProcessing = false);
     }
   }
+  Future<void> _enroll() async {
+    if (_isProcessing) return;
+    setState(() => _isProcessing = true);
 
+    try {
+      await _initializeControllerFuture;
+      final image = await _controller.takePicture();
+      final inputImage = InputImage.fromFilePath(image.path);
+      final faces = await _faceService.detectFaces(inputImage);
+
+      if (faces == null || faces.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No face detected')));
+        return;
+      }
+
+
+      final bytes = await File(image.path).readAsBytes();
+      final embedding = await _faceService.getEmbedding(bytes);
+
+      final existingUser = await _dbService.isFaceAlreadyEnrolledGlobally(embedding);
+      if (existingUser != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('This face already exists (User: $existingUser)!'))
+        );
+        return;
+      }
+
+      // Save multiple embeddings per user
+      await _dbService.saveFace(_userIdController.text, embedding);
+
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Enrollment successful')));
+      _userIdController.clear();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      setState(() => _isProcessing = false);
+    }
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
