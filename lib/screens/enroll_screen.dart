@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
@@ -63,6 +64,26 @@ class _EnrollScreenState extends State<EnrollScreen> {
     });
     setState(() {});
   }
+  Future<bool> isFaceInsideGuide(Face face, Size previewSize) async {
+    // Guide box dimensions (same as painter)
+    final rectWidth = previewSize.width * 0.6;
+    final rectHeight = previewSize.height * 0.5;
+    final guideRect = Rect.fromCenter(
+      center: Offset(previewSize.width / 2, previewSize.height / 2),
+      width: rectWidth,
+      height: rectHeight,
+    );
+
+    final faceRect = Rect.fromLTWH(
+      face.boundingBox.left,
+      face.boundingBox.top,
+      face.boundingBox.width,
+      face.boundingBox.height,
+    );
+
+    return guideRect.contains(faceRect.topLeft) && guideRect.contains(faceRect.bottomRight);
+  }
+
 
   Future<void> _enroll_working_single_entry() async {
     if (_isProcessing) return;
@@ -97,6 +118,34 @@ class _EnrollScreenState extends State<EnrollScreen> {
       setState(() => _isProcessing = false);
     }
   }
+  bool _isFaceInsideGuide(Face face, Size previewSize) {
+    final rectWidth = previewSize.width * 0.6;
+    final rectHeight = previewSize.height * 0.5;
+    final guideRect = Rect.fromCenter(
+      center: Offset(previewSize.width / 2, previewSize.height / 2),
+      width: rectWidth,
+      height: rectHeight,
+    );
+
+    final faceRect = Rect.fromLTWH(
+      face.boundingBox.left,
+      face.boundingBox.top,
+      face.boundingBox.width,
+      face.boundingBox.height,
+    );
+
+    return guideRect.contains(faceRect.topLeft) &&
+        guideRect.contains(faceRect.bottomRight);
+  }
+  double _cosineSimilarity(List<double> a, List<double> b) {
+    double dot = 0, magA = 0, magB = 0;
+    for (int i = 0; i < a.length; i++) {
+      dot += a[i] * b[i];
+      magA += a[i] * a[i];
+      magB += b[i] * b[i];
+    }
+    return dot / (sqrt(magA) * sqrt(magB));
+  }
   Future<void> _enroll() async {
     if (_isProcessing) return;
     setState(() => _isProcessing = true);
@@ -111,7 +160,20 @@ class _EnrollScreenState extends State<EnrollScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No face detected')));
         return;
       }
-
+      // final previewSize = Size(_controller.value.previewSize!.height, _controller.value.previewSize!.width); // note rotation
+      // if (!await isFaceInsideGuide(faces[0], previewSize)) {
+      //   ScaffoldMessenger.of(context).showSnackBar(
+      //       SnackBar(content: Text('Please align your face inside the red box'))
+      //   );
+      //   return;
+      // }
+      final previewSize = Size(_controller.value.previewSize!.height, _controller.value.previewSize!.width);
+      if (!_isFaceInsideGuide(faces[0], previewSize)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Please align your face inside the red box')),
+        );
+        return;
+      }
 
       final bytes = await File(image.path).readAsBytes();
       final embedding = await _faceService.getEmbedding(bytes);
@@ -141,17 +203,39 @@ class _EnrollScreenState extends State<EnrollScreen> {
       appBar: AppBar(title: Text('Enroll Face')),
       body: Column(
         children: [
+          // Expanded(
+          //   child: FutureBuilder<void>(
+          //     future: _initializeControllerFuture,
+          //     builder: (context, snapshot) {
+          //       if (snapshot.connectionState == ConnectionState.done && !snapshot.hasError) {
+          //         return CameraPreview(_controller);
+          //       }
+          //       return Center(child: CircularProgressIndicator());
+          //     },
+          //   ),
+          // ),
           Expanded(
-            child: FutureBuilder<void>(
-              future: _initializeControllerFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.done && !snapshot.hasError) {
-                  return CameraPreview(_controller);
-                }
-                return Center(child: CircularProgressIndicator());
-              },
+            child: Stack(
+              children: [
+                FutureBuilder<void>(
+                  future: _initializeControllerFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.done && !snapshot.hasError) {
+                      return CameraPreview(_controller);
+                    }
+                    return Center(child: CircularProgressIndicator());
+                  },
+                ),
+                // Face guide box
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: FaceGuidePainter(),
+                  ),
+                ),
+              ],
             ),
           ),
+
           Padding(
             padding: EdgeInsets.all(16.0),
             child: TextField(
@@ -178,4 +262,29 @@ class _EnrollScreenState extends State<EnrollScreen> {
     _faceService.dispose();
     super.dispose();
   }
+}
+
+
+class FaceGuidePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.red
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3;
+
+    // Draw a centered rectangle (example: 60% of width, 50% of height)
+    final rectWidth = size.width * 0.6;
+    final rectHeight = size.height * 0.5;
+    final rect = Rect.fromCenter(
+      center: size.center(Offset.zero),
+      width: rectWidth,
+      height: rectHeight,
+    );
+
+    canvas.drawRect(rect, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
