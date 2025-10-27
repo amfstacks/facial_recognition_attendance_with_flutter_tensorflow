@@ -1,12 +1,13 @@
 import 'dart:io';
 import 'dart:math';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/face_service.dart';
-import '../services/db_service.dart'; // Updated to use SQLite
+import '../services/db_service.dart';
 
 class EnrollScreen extends StatefulWidget {
   @override
@@ -20,6 +21,10 @@ class _EnrollScreenState extends State<EnrollScreen> {
   final DbService _dbService = DbService();
   final TextEditingController _userIdController = TextEditingController();
   bool _isProcessing = false;
+  bool _isFaceAligned = false;
+
+  List<CameraDescription> _cameras = [];
+  int _selectedCameraIndex = 0;
 
   @override
   void initState() {
@@ -28,6 +33,15 @@ class _EnrollScreenState extends State<EnrollScreen> {
     _initializeCamera();
   }
 
+  @override
+  void dispose() {
+    _controller.dispose();
+    _faceService.dispose();
+    _userIdController.dispose();
+    super.dispose();
+  }
+
+  /// ------------------ CAMERA ------------------
   Future<void> _requestPermissions() async {
     var status = await Permission.camera.status;
     if (!status.isGranted) {
@@ -47,16 +61,21 @@ class _EnrollScreenState extends State<EnrollScreen> {
     }
   }
 
-  Future<void> _initializeCamera() async {
+  Future<void> _initializeCamera({int cameraIndex = 0}) async {
     await _requestPermissions();
-    final cameras = await availableCameras();
-    if (cameras.isEmpty) {
+    _cameras = await availableCameras();
+    if (_cameras.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No cameras available on this device.')),
       );
       return;
     }
-    _controller = CameraController(cameras[1], ResolutionPreset.high); // Front camera
+    _selectedCameraIndex = cameraIndex.clamp(0, _cameras.length - 1);
+    _controller = CameraController(
+      _cameras[_selectedCameraIndex],
+      ResolutionPreset.high,
+      enableAudio: false,
+    );
     _initializeControllerFuture = _controller.initialize().catchError((e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Camera initialization failed: $e')),
@@ -64,60 +83,14 @@ class _EnrollScreenState extends State<EnrollScreen> {
     });
     setState(() {});
   }
-  Future<bool> isFaceInsideGuide(Face face, Size previewSize) async {
-    // Guide box dimensions (same as painter)
-    final rectWidth = previewSize.width * 0.6;
-    final rectHeight = previewSize.height * 0.5;
-    final guideRect = Rect.fromCenter(
-      center: Offset(previewSize.width / 2, previewSize.height / 2),
-      width: rectWidth,
-      height: rectHeight,
-    );
 
-    final faceRect = Rect.fromLTWH(
-      face.boundingBox.left,
-      face.boundingBox.top,
-      face.boundingBox.width,
-      face.boundingBox.height,
-    );
-
-    return guideRect.contains(faceRect.topLeft) && guideRect.contains(faceRect.bottomRight);
+  void _switchCamera() {
+    final newIndex = (_selectedCameraIndex + 1) % _cameras.length;
+    _controller.dispose();
+    _initializeCamera(cameraIndex: newIndex);
   }
 
-
-  Future<void> _enroll_working_single_entry() async {
-    if (_isProcessing) return;
-    setState(() => _isProcessing = true);
-
-    try {
-      await _initializeControllerFuture;
-      final image = await _controller.takePicture();
-      final inputImage = InputImage.fromFilePath(image.path);
-      final faces = await _faceService.detectFaces(inputImage);
-
-      if (faces == null || faces.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No face detected')));
-        return;
-      }
-
-      // if (!await _faceService.isLivenessDetected(faces)) {
-      //   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Liveness check failed')));
-      //   return;
-      // }
-
-      final bytes = await File(image.path).readAsBytes();
-      final embedding = await _faceService.getEmbedding(bytes);
-
-      // Save to SQLite instead of server
-      await _dbService.saveFace(_userIdController.text, embedding);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Enrollment successful')));
-      Navigator.pushNamed(context, '/recognize');
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-    } finally {
-      setState(() => _isProcessing = false);
-    }
-  }
+  /// ------------------ FACE GUIDE ------------------
   bool _isFaceInsideGuide(Face face, Size previewSize) {
     final rectWidth = previewSize.width * 0.6;
     final rectHeight = previewSize.height * 0.5;
@@ -137,6 +110,7 @@ class _EnrollScreenState extends State<EnrollScreen> {
     return guideRect.contains(faceRect.topLeft) &&
         guideRect.contains(faceRect.bottomRight);
   }
+
   double _cosineSimilarity(List<double> a, List<double> b) {
     double dot = 0, magA = 0, magB = 0;
     for (int i = 0; i < a.length; i++) {
@@ -146,74 +120,135 @@ class _EnrollScreenState extends State<EnrollScreen> {
     }
     return dot / (sqrt(magA) * sqrt(magB));
   }
-  Future<void> _enroll() async {
+
+  /// ------------------ STRICT ENROLLMENT ------------------
+  Future<void> _enrollStrict() async {
     if (_isProcessing) return;
     setState(() => _isProcessing = true);
 
     try {
       await _initializeControllerFuture;
-      final image = await _controller.takePicture();
-      final inputImage = InputImage.fromFilePath(image.path);
-      final faces = await _faceService.detectFaces(inputImage);
+      final previewSize = Size(
+        _controller.value.previewSize!.height,
+        _controller.value.previewSize!.width,
+      );
 
-      if (faces == null || faces.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No face detected')));
-        return;
-      }
-      // final previewSize = Size(_controller.value.previewSize!.height, _controller.value.previewSize!.width); // note rotation
-      // if (!await isFaceInsideGuide(faces[0], previewSize)) {
-      //   ScaffoldMessenger.of(context).showSnackBar(
-      //       SnackBar(content: Text('Please align your face inside the red box'))
-      //   );
-      //   return;
-      // }
-      final previewSize = Size(_controller.value.previewSize!.height, _controller.value.previewSize!.width);
-      if (!_isFaceInsideGuide(faces[0], previewSize)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Please align your face inside the red box')),
-        );
-        return;
+      int stableFramesRequired = 3;
+      int stableFramesCount = 0;
+      XFile? bestImage;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Align your face inside the box and stay still'))
+      );
+
+      while (stableFramesCount < stableFramesRequired) {
+        final image = await _controller.takePicture();
+        final inputImage = InputImage.fromFilePath(image.path);
+        final faces = await _faceService.detectFaces(inputImage);
+
+        if (faces == null || faces.isEmpty) {
+          stableFramesCount = 0;
+          setState(() => _isFaceAligned = false);
+          await Future.delayed(Duration(milliseconds: 800));
+          continue;
+        }
+
+        final face = faces[0];
+
+        // ------------------ ORIENTATION CHECK ------------------
+        final yaw = face.headEulerAngleY ?? 0;
+        final roll = face.headEulerAngleZ ?? 0;
+        final pitch = face.headEulerAngleX ?? 0;
+
+        if (yaw.abs() > 15 || roll.abs() > 10 || pitch.abs() > 10) {
+          stableFramesCount = 0;
+          setState(() => _isFaceAligned = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Face must be straight and centered'))
+          );
+          await Future.delayed(Duration(milliseconds: 800));
+          continue;
+        }
+
+        // ------------------ GUIDE BOX CHECK ------------------
+        if (!_isFaceInsideGuide(face, previewSize)) {
+          stableFramesCount = 0;
+          setState(() => _isFaceAligned = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Keep your face inside the red box'))
+          );
+          await Future.delayed(Duration(milliseconds: 800));
+          continue;
+        }
+
+        // Face is aligned, inside box
+        stableFramesCount++;
+        bestImage = image;
+        setState(() => _isFaceAligned = true);
+        await Future.delayed(Duration(milliseconds: 500));
       }
 
-      final bytes = await File(image.path).readAsBytes();
+      // ------------------ GET EMBEDDING ------------------
+      final bytes = await File(bestImage!.path).readAsBytes();
       final embedding = await _faceService.getEmbedding(bytes);
 
-      final existingUser = await _dbService.isFaceAlreadyEnrolledGlobally(embedding);
+      // ------------------ GLOBAL DUPLICATE CHECK ------------------
+      final existingUser = await _dbService.isFaceAlreadyEnrolledGlobally(
+        embedding,
+        threshold: 0.85,
+      );
       if (existingUser != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('This face already exists (User: $existingUser)!'))
+          SnackBar(content: Text('This face already exists (User: $existingUser)!')),
         );
         return;
       }
 
-      // Save multiple embeddings per user
-      await _dbService.saveFace(_userIdController.text, embedding);
+      // ------------------ MULTI-ANGLE CHECK ------------------
+      final userEmbeddings = await _dbService.getEmbeddingsForUser(_userIdController.text);
+      for (var e in userEmbeddings) {
+        final sim = _cosineSimilarity(embedding, e);
+        if (sim > 0.95) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('This angle is already enrolled for this user!')),
+          );
+          return;
+        }
+      }
 
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Enrollment successful')));
+      // ------------------ SAVE EMBEDDING ------------------
+      await _dbService.saveFace(_userIdController.text, embedding);
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Enrollment successful!'))
+      );
       _userIdController.clear();
+      setState(() => _isFaceAligned = false);
+
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'))
+      );
     } finally {
       setState(() => _isProcessing = false);
     }
   }
+
+  /// ------------------ WIDGET BUILD ------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Enroll Face')),
+      appBar: AppBar(
+        title: Text('Enroll Face'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.cameraswitch),
+            onPressed: _cameras.length > 1 ? _switchCamera : null,
+            tooltip: 'Switch Camera',
+          ),
+        ],
+      ),
       body: Column(
         children: [
-          // Expanded(
-          //   child: FutureBuilder<void>(
-          //     future: _initializeControllerFuture,
-          //     builder: (context, snapshot) {
-          //       if (snapshot.connectionState == ConnectionState.done && !snapshot.hasError) {
-          //         return CameraPreview(_controller);
-          //       }
-          //       return Center(child: CircularProgressIndicator());
-          //     },
-          //   ),
-          // ),
           Expanded(
             child: Stack(
               children: [
@@ -226,16 +261,14 @@ class _EnrollScreenState extends State<EnrollScreen> {
                     return Center(child: CircularProgressIndicator());
                   },
                 ),
-                // Face guide box
                 Positioned.fill(
                   child: CustomPaint(
-                    painter: FaceGuidePainter(),
+                    painter: FaceGuidePainter(isAligned: _isFaceAligned),
                   ),
                 ),
               ],
             ),
           ),
-
           Padding(
             padding: EdgeInsets.all(16.0),
             child: TextField(
@@ -244,7 +277,7 @@ class _EnrollScreenState extends State<EnrollScreen> {
             ),
           ),
           ElevatedButton(
-            onPressed: _isProcessing ? null : _enroll,
+            onPressed: _isProcessing ? null : _enrollStrict,
             child: Text(_isProcessing ? 'Processing...' : 'Enroll'),
           ),
           TextButton(
@@ -255,25 +288,20 @@ class _EnrollScreenState extends State<EnrollScreen> {
       ),
     );
   }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _faceService.dispose();
-    super.dispose();
-  }
 }
 
-
+/// ------------------ GUIDE BOX PAINTER ------------------
 class FaceGuidePainter extends CustomPainter {
+  final bool isAligned;
+  FaceGuidePainter({this.isAligned = false});
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.red
+      ..color = isAligned ? Colors.green : Colors.red
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3;
 
-    // Draw a centered rectangle (example: 60% of width, 50% of height)
     final rectWidth = size.width * 0.6;
     final rectHeight = size.height * 0.5;
     final rect = Rect.fromCenter(
@@ -286,5 +314,5 @@ class FaceGuidePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant FaceGuidePainter oldDelegate) => oldDelegate.isAligned != isAligned;
 }
