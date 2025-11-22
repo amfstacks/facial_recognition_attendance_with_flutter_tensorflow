@@ -6,14 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../services/api_service.dart';
 import '../services/face_service.dart';
 import '../services/db_service.dart';
 
 class EnrollScreen extends StatefulWidget {
-  final Member member;
-  const EnrollScreen({Key? key, required this.member}) : super(key: key);
-
   @override
   _EnrollScreenState createState() => _EnrollScreenState();
 }
@@ -23,9 +19,7 @@ class _EnrollScreenState extends State<EnrollScreen> {
   late Future<void> _initializeControllerFuture;
   final FaceService _faceService = FaceService();
   final DbService _dbService = DbService();
-  final ApiService _apiService = ApiService();
   final TextEditingController _userIdController = TextEditingController();
-
   bool _isProcessing = false;
   bool _isFaceAligned = false;
 
@@ -36,7 +30,6 @@ class _EnrollScreenState extends State<EnrollScreen> {
   void initState() {
     super.initState();
     _faceService.init();
-    _userIdController.text = widget.member.id.toString(); // <-- set member ID
     _initializeCamera();
   }
 
@@ -48,6 +41,7 @@ class _EnrollScreenState extends State<EnrollScreen> {
     super.dispose();
   }
 
+  /// ------------------ CAMERA ------------------
   Future<void> _requestPermissions() async {
     var status = await Permission.camera.status;
     if (!status.isGranted) {
@@ -199,19 +193,19 @@ class _EnrollScreenState extends State<EnrollScreen> {
       final embedding = await _faceService.getEmbedding(bytes);
 
       // ------------------ GLOBAL DUPLICATE CHECK ------------------
-      // final existingUser = await _apiService.isFaceAlreadyEnrolledGlobally(
-      //   embedding,
-      //   threshold: 0.85,
-      // );
-      // if (existingUser != null) {
-      //   ScaffoldMessenger.of(context).showSnackBar(
-      //     SnackBar(content: Text('This face already exists (User: $existingUser)!')),
-      //   );
-      //   return;
-      // }
+      final existingUser = await _dbService.isFaceAlreadyEnrolledGlobally(
+        embedding,
+        threshold: 0.85,
+      );
+      if (existingUser != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('This face already exists (User: $existingUser)!')),
+        );
+        return;
+      }
 
       // ------------------ MULTI-ANGLE CHECK ------------------
-      final userEmbeddings = await _apiService.getEmbeddingsForUser(widget.member.id);
+      final userEmbeddings = await _dbService.getEmbeddingsForUser(_userIdController.text);
       for (var e in userEmbeddings) {
         final sim = _cosineSimilarity(embedding, e);
         if (sim > 0.95) {
@@ -223,10 +217,7 @@ class _EnrollScreenState extends State<EnrollScreen> {
       }
 
       // ------------------ SAVE EMBEDDING ------------------
-      // await _dbService.saveFace(_userIdController.text, embedding);
-      final result = await _apiService.saveMemberFace(widget.member.id, embedding);
-      print(result);
-      print('result');
+      await _dbService.saveFace(_userIdController.text, embedding);
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Enrollment successful!'))
       );
@@ -247,7 +238,7 @@ class _EnrollScreenState extends State<EnrollScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Enroll ${widget.member.name}',style: TextStyle(fontSize: 14),),
+        title: Text('Enroll Face'),
         actions: [
           IconButton(
             icon: Icon(Icons.cameraswitch),
@@ -258,7 +249,6 @@ class _EnrollScreenState extends State<EnrollScreen> {
       ),
       body: Column(
         children: [
-          // camera preview stack remains unchanged
           Expanded(
             child: Stack(
               children: [
@@ -279,30 +269,26 @@ class _EnrollScreenState extends State<EnrollScreen> {
               ],
             ),
           ),
-          // show member info above enroll button
           Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                Text(
-                  widget.member.name,
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                Text("Tally No: ${widget.member.id}"),
-                SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: _isProcessing ? null : _enrollStrict,
-                  child: Text(_isProcessing ? 'Processing...' : 'Enroll'),
-                ),
-              ],
+            padding: EdgeInsets.all(16.0),
+            child: TextField(
+              controller: _userIdController,
+              decoration: InputDecoration(labelText: 'User ID'),
             ),
+          ),
+          ElevatedButton(
+            onPressed: _isProcessing ? null : _enrollStrict,
+            child: Text(_isProcessing ? 'Processing...' : 'Enroll'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pushNamed(context, '/recognize'),
+            child: Text('Go to Recognition'),
           ),
         ],
       ),
     );
   }
 }
-
 
 /// ------------------ GUIDE BOX PAINTER ------------------
 class FaceGuidePainter extends CustomPainter {

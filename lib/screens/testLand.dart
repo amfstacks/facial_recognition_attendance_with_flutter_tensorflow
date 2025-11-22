@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../services/api_service.dart';
+import 'enroll_screen.dart';
 
 class TallyLookupScreen extends StatefulWidget {
   const TallyLookupScreen({Key? key}) : super(key: key);
@@ -12,6 +14,26 @@ class _TallyLookupScreenState extends State<TallyLookupScreen> {
   final TextEditingController _tallyController = TextEditingController();
   bool _isLoading = false;
   Member? _member;
+
+  Future<void> _requestPermissions() async {
+    var status = await Permission.camera.status;
+    if (!status.isGranted) {
+      status = await Permission.camera.request();
+      if (status.isDenied || status.isPermanentlyDenied) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Camera permission required. Please enable in settings.'),
+            action: SnackBarAction(
+              label: 'Settings',
+              onPressed: () => openAppSettings(),
+            ),
+          ),
+        );
+        return;
+      }
+    }
+  }
+
 
   Future<void> _searchTally() async {
     final qrData = _tallyController.text.trim();
@@ -49,6 +71,12 @@ class _TallyLookupScreenState extends State<TallyLookupScreen> {
   void dispose() {
     _tallyController.dispose();
     super.dispose();
+  }
+  @override
+  void initState() {
+    // TODO: implement initState
+    _requestPermissions();
+    super.initState();
   }
 
   @override
@@ -180,6 +208,20 @@ class _TallyLookupScreenState extends State<TallyLookupScreen> {
                       ),
                     ),
                     SizedBox(height: 12),
+                    SizedBox(height: 12),
+                    TextButton(
+                      onPressed: () {
+      if (_member != null) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EnrollScreen(member: _member! ),
+                          ),
+                        );
+                      }},
+                      child: Text('Capture face'),
+                    )
+
                   ],
                 ),
               ),

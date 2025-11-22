@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import '../models/attendance.dart';
 
@@ -19,6 +20,92 @@ class ApiService {
     }
   }
 
+   Future<bool> saveMemberFace(int memberId, List<double> embedding) async {
+    try {
+      print(memberId);
+      final response = await http.post(
+        Uri.parse(baseUrl),
+        body: {
+          'member_id': memberId.toString(),
+          'embedding': jsonEncode(embedding),
+        },
+      );
+      print('Response body: ${response.body}');
+      print('Status code: ${response.statusCode}');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['success'] == true;
+      }
+      return false;
+    } catch (e) {
+      print('Error saving member face: $e');
+      return false;
+    }
+  }
+
+   Future<List<List<double>>> getEmbeddingsForUser(int memberId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl?member_id=$memberId'));
+      if (response.statusCode == 200) {
+        final List data = jsonDecode(response.body);
+        return data.map<List<double>>((e) {
+          final raw = (jsonDecode(e['embedding']) as List).map((v) => (v as num).toDouble()).toList();
+          return _normalize(raw);
+        }).toList();
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching user embeddings: $e');
+      return [];
+    }
+  }
+
+  /// Get all faces globally
+   Future<List<Map<String, dynamic>>> getFaces() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl?all_faces=1'));
+      if (response.statusCode == 200) {
+        final List data = jsonDecode(response.body);
+        return data.map<Map<String, dynamic>>((e) {
+          final embedding = (jsonDecode(e['embedding']) as List).map((v) => (v as num).toDouble()).toList();
+          return {
+            'member_id': e['member_id'],
+            'embedding': _normalize(embedding),
+          };
+        }).toList();
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching global faces: $e');
+      return [];
+    }
+  }
+  List<double> _normalize(List<double> embedding) {
+    final mag = sqrt(embedding.fold(0, (sum, e) => sum + e * e));
+    return embedding.map((e) => e / mag).toList();
+  }
+  Future<String?> isFaceAlreadyEnrolledGlobally(List<double> newEmbedding,
+      {double threshold = 0.85}) async {
+    final faces = await getFaces();
+    final normalized = _normalize(newEmbedding);
+
+    for (var face in faces) {
+      final stored = _normalize(jsonDecode(face['embedding']).cast<double>());
+      final similarity = _cosineSimilarity(normalized, stored);
+      if (similarity >= threshold) return face['user_id'];
+    }
+    return null;
+  }
+
+  double _cosineSimilarity(List<double> a, List<double> b) {
+    double dot = 0, magA = 0, magB = 0;
+    for (int i = 0; i < a.length; i++) {
+      dot += a[i] * b[i];
+      magA += a[i] * a[i];
+      magB += b[i] * b[i];
+    }
+    return dot / (sqrt(magA) * sqrt(magB));
+  }
   Future<bool> enroll(String userId, List<double> embedding) async {
     final response = await http.post(
       Uri.parse('$baseUrl/enroll.php'),
@@ -60,6 +147,24 @@ class ApiService {
       return data.map((e) => Attendance.fromMap(e)).toList();
     }
     return [];
+  }
+
+
+
+  Future<String?> recognizeFace(List<double> embedding) async {
+    final faces = await getFaces();
+    double bestScore = 0;
+    String? bestMatch;
+
+    for (var face in faces) {
+      final storedEmbedding = jsonDecode(face['embedding']).cast<double>();
+      final score = _cosineSimilarity(embedding, storedEmbedding);
+      if (score > 0.65 && score > bestScore) { // Tuned threshold
+        bestScore = score;
+        bestMatch = face['user_id'];
+      }
+    }
+    return bestMatch;
   }
 }
 
