@@ -68,9 +68,10 @@ class ApiService {
         final List data = jsonDecode(response.body);
         return data.map<Map<String, dynamic>>((e) {
           final embedding = (jsonDecode(e['embedding']) as List).map((v) => (v as num).toDouble()).toList();
+          final normalized = _normalize(embedding);
           return {
             'member_id': e['member_id'],
-            'embedding': _normalize(embedding),
+            'embedding': jsonEncode(normalized),
           };
         }).toList();
       }

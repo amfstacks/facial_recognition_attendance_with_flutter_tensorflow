@@ -29,7 +29,7 @@ class _RecognizeScreenState extends State<RecognizeScreen> {
     _initializeCamera();
   }
 
-  Future<void> _initializeCamera() async {
+  Future<void> _initializeCamera__() async {
     final cameras = await availableCameras();
     if (cameras.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -45,51 +45,31 @@ class _RecognizeScreenState extends State<RecognizeScreen> {
     });
     setState(() {});
   }
-
-  Future<void> _recognize_working_single_entry() async {
-    if (_isProcessing) return;
-    setState(() => _isProcessing = true);
-
-    try {
-      await _initializeControllerFuture;
-      final image = await _controller.takePicture();
-      final inputImage = InputImage.fromFilePath(image.path);
-      final faces = await _faceService.detectFaces(inputImage);
-
-      if (faces == null || faces.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No face detected')));
-        return;
-      }
-
-      // if (!await _faceService.isLivenessDetected(faces)) {
-      //   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Liveness check failed')));
-      //   return;
-      // }
-
-      final bytes = await File(image.path).readAsBytes();
-      final embedding = await _faceService.getEmbedding(bytes);
-      final userId = await _apiService.recognizeFace(embedding);
-print(userId);
-print('userId');
-return;
-      if (userId != null) {
-        final attendance = Attendance(
-          userId: userId,
-          timestamp: DateTime.now(),
-          status: 'present',
-        );
-        // await _dbService.cacheAttendance(attendance);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Attendance marked for $userId')));
-        Navigator.pushNamed(context, '/history');
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No match found')));
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-    } finally {
-      setState(() => _isProcessing = false);
+  Future<void> _initializeCamera() async {
+    final cameras = await availableCameras();
+    if (cameras.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No cameras available on this device.')),
+      );
+      return;
     }
+
+    // Select back camera if available, otherwise first camera
+    final backCamera = cameras.firstWhere(
+          (camera) => camera.lensDirection == CameraLensDirection.back,
+      orElse: () => cameras.first,
+    );
+
+    _controller = CameraController(backCamera, ResolutionPreset.high);
+    _initializeControllerFuture = _controller.initialize().catchError((e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Camera initialization failed: $e')),
+      );
+    });
+
+    setState(() {});
   }
+
 
   Future<void> _recognize() async {
     if (_isProcessing) return;

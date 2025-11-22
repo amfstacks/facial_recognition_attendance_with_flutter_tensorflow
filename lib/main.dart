@@ -19,7 +19,7 @@ class FaceRecognitionApp extends StatelessWidget {
       routes: {
         // '/': (context) => EnrollScreen(),
         '/': (context) => TallyLookupScreen(),
-        // '/recognize': (context) => RecognizeScreen(),
+        '/recognize': (context) => RecognizeScreen(),
         // '/history': (context) => HistoryScreen(),
       },
     );

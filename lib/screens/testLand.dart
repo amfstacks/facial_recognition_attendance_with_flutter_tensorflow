@@ -225,6 +225,12 @@ class _TallyLookupScreenState extends State<TallyLookupScreen> {
                   ],
                 ),
               ),
+
+
+            TextButton(
+              onPressed: () => Navigator.pushNamed(context, '/recognize'),
+              child: Text('Go to Recognition'),
+            ),
           ],
         ),
       ),
