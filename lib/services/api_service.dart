@@ -156,13 +156,14 @@ class ApiService {
     final faces = await getFaces();
     double bestScore = 0;
     String? bestMatch;
-
+// print(faces);
+// print('faces___');
     for (var face in faces) {
       final storedEmbedding = jsonDecode(face['embedding']).cast<double>();
       final score = _cosineSimilarity(embedding, storedEmbedding);
       if (score > 0.65 && score > bestScore) { // Tuned threshold
         bestScore = score;
-        bestMatch = face['user_id'];
+        bestMatch = face['member_id'];
       }
     }
     return bestMatch;
