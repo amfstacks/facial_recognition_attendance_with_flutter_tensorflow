@@ -1,3 +1,4 @@
+import 'package:facal_recognition/screens/testLand.dart';
 import 'package:flutter/material.dart';
 import 'screens/enroll_screen.dart';
 import 'screens/recognize_screen.dart';
@@ -16,7 +17,8 @@ class FaceRecognitionApp extends StatelessWidget {
       theme: ThemeData(primarySwatch: Colors.blue),
       initialRoute: '/',
       routes: {
-        '/': (context) => EnrollScreen(),
+        // '/': (context) => EnrollScreen(),
+        '/': (context) => TallyLookupScreen(),
         // '/recognize': (context) => RecognizeScreen(),
         // '/history': (context) => HistoryScreen(),
       },
