@@ -168,6 +168,22 @@ class ApiService {
     }
     return bestMatch;
   }
+
+   Future<Map<String, dynamic>> recordAttendance(int memberId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl'),
+        body: {'action': 'record_attendance', 'member_id': memberId.toString()},
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'success': false, 'message': 'Failed to connect to server.'};
+    } catch (e) {
+      print('Error recording attendance: $e');
+      return {'success': false, 'message': 'Error recording attendance.'};
+    }
+  }
 }
 
 class Member {

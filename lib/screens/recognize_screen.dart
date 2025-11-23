@@ -92,16 +92,23 @@ class _RecognizeScreenState extends State<RecognizeScreen> {
       final userId = await _apiService.recognizeFace(embedding);
       print(userId);
       print('userId');
-      return;
+      // return;
       if (userId != null) {
-        final attendance = Attendance(
-          userId: userId,
-          timestamp: DateTime.now(),
-          status: 'present',
-        );
+        final intId = int.tryParse(userId);
+
+        if (intId == null) {
+          print("Invalid userId");
+          return;
+        }
+        final markAttendance = await _apiService.recordAttendance(intId);
+        // final attendance = Attendance(
+        //   userId: userId,
+        //   timestamp: DateTime.now(),
+        //   status: 'present',
+        // );
         // await _dbService.cacheAttendance(attendance);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Attendance marked for $userId')));
-        Navigator.pushNamed(context, '/history');
+        // Navigator.pushNamed(context, '/history');
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No match found')));
       }
