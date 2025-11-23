@@ -19,19 +19,21 @@ class _TallyLookupScreenState extends State<TallyLookupScreen> {
     var status = await Permission.camera.status;
     if (!status.isGranted) {
       status = await Permission.camera.request();
-      if (!status.isGranted) {
+      if (status.isDenied || status.isPermanentlyDenied) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Camera permission required.'),
+            content: Text('Camera permission required. Please enable in settings.'),
             action: SnackBarAction(
               label: 'Settings',
               onPressed: () => openAppSettings(),
             ),
           ),
         );
+        return;
       }
     }
   }
+
 
   Future<void> _searchTally() async {
     final qrData = _tallyController.text.trim();
@@ -66,135 +68,119 @@ class _TallyLookupScreenState extends State<TallyLookupScreen> {
   }
 
   @override
-  void initState() {
-    super.initState();
-    _requestPermissions();
-  }
-
-  @override
   void dispose() {
     _tallyController.dispose();
     super.dispose();
+  }
+  @override
+  void initState() {
+    // TODO: implement initState
+    _requestPermissions();
+    super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xfff5f6fb),
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
-        centerTitle: true,
-        toolbarHeight: 80,
-        title: Column(
-          children: [
-            Text(
-              "Church of Christ, Kado",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
-                color: Colors.black87,
-              ),
-            ),
-            SizedBox(height: 4),
-            Text(
-              "Facial Attendance System",
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.grey[600],
-              ),
-            )
-          ],
+        backgroundColor: Colors.transparent,
+        title: Text(
+          "Church of Christ, Kado ",
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
         ),
+        centerTitle: true,
+        foregroundColor: Colors.black87,
       ),
-
       body: SingleChildScrollView(
         padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // HEADER
             SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                "Search by Tally Number",
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black87,
-                ),
-              ),
+            //
+            Text('Facial attendance system'),
+            SizedBox(height: 10),
+            Text(
+              "Search by Tally Number",
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[800]),
             ),
             SizedBox(height: 20),
 
-            // INPUT FIELD
+            // Tally input field
             TextField(
               controller: _tallyController,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
-                labelText: "Tally Number",
+                hintText: "Enter Tally Number",
                 prefixIcon: Icon(Icons.confirmation_number_outlined),
                 filled: true,
                 fillColor: Colors.white,
-                contentPadding: EdgeInsets.symmetric(vertical: 18, horizontal: 15),
+                contentPadding:
+                EdgeInsets.symmetric(vertical: 18, horizontal: 15),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(15),
                   borderSide: BorderSide.none,
                 ),
               ),
             ),
             SizedBox(height: 20),
 
-            // BUTTON
+            // Search button
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _searchTally,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent.shade700,
-                  elevation: 4,
                   padding: EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+                      borderRadius: BorderRadius.circular(15)),
+                  elevation: 3,
+                  backgroundColor: Colors.blueAccent,
                 ),
                 child: _isLoading
-                    ? CircularProgressIndicator(
-                    color: Colors.white, strokeWidth: 2)
+                    ? SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2.5,
+                  ),
+                )
                     : Text(
                   "Search",
                   style: TextStyle(
-                      fontSize: 17,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5),
+                      fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
             SizedBox(height: 30),
 
-            // RESULT CARD
+            // Result Card
             if (_member != null)
-              AnimatedContainer(
-                duration: Duration(milliseconds: 300),
+              Container(
                 width: double.infinity,
-                padding: EdgeInsets.all(24),
+                padding: EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(18),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black12,
-                      blurRadius: 20,
-                      offset: Offset(0, 10),
+                      blurRadius: 12,
+                      offset: Offset(0, 6),
                     ),
                   ],
                 ),
                 child: Column(
                   children: [
+                    // Profile image
                     CircleAvatar(
-                      radius: 55,
+                      radius: 60,
                       backgroundImage: NetworkImage(
                         _member!.imageUrl.isNotEmpty
                             ? 'https://cockadocms.com/uploads/${_member!.imageUrl}'
@@ -202,78 +188,52 @@ class _TallyLookupScreenState extends State<TallyLookupScreen> {
                       ),
                       backgroundColor: Colors.grey[200],
                     ),
-                    SizedBox(height: 18),
+                    SizedBox(height: 20),
 
+                    // Full name
                     Text(
                       _member!.name,
                       style: TextStyle(
-                        fontSize: 23,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black87,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[900],
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    SizedBox(height: 6),
+                    SizedBox(height: 8),
 
+                    // Tally number
                     Text(
                       "Tally No: ${_tallyController.text}",
                       style: TextStyle(
-                        fontSize: 15,
+                        fontSize: 16,
                         color: Colors.grey[700],
                       ),
                     ),
-                    SizedBox(height: 18),
+                    SizedBox(height: 12),
+                    SizedBox(height: 12),
+                    TextButton(
+                      onPressed: () {
+      if (_member != null) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EnrollScreen(member: _member! ),
+                          ),
+                        );
+                      }},
+                      child: Text('Capture face'),
+                    )
 
-                    // CAPTURE BUTTON
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        icon: Icon(Icons.camera_alt_outlined),
-                        label: Text(
-                          "Capture Face",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: EdgeInsets.symmetric(vertical: 14),
-                          side: BorderSide(color: Colors.blueAccent, width: 1.6),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  EnrollScreen(member: _member!),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
                   ],
                 ),
               ),
 
-            SizedBox(height: 40),
 
-            // MARK ATTENDANCE BUTTON (BOTTOM)
-            // TextButton(
-            //   onPressed: () => Navigator.pushNamed(context, '/recognize'),
-            //   child: Text(
-            //     'Mark Attendance',
-            //     style: TextStyle(
-            //       fontSize: 16,
-            //       color: Colors.blueAccent.shade700,
-            //       fontWeight: FontWeight.w600,
-            //       decoration: TextDecoration.underline,
-            //     ),
-            //   ),
-            // ),
-            SizedBox(height: 20),
+            TextButton(
+              onPressed: () => Navigator.pushNamed(context, '/recognize'),
+              child: Text('Mark Attendance'),
+            ),
           ],
         ),
       ),

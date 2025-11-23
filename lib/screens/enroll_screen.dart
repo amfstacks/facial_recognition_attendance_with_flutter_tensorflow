@@ -28,6 +28,8 @@ class _EnrollScreenState extends State<EnrollScreen> {
 
   bool _isProcessing = false;
   bool _isFaceAligned = false;
+  String _alignmentMessage = '';
+  bool _showMessage = false;
 
   List<CameraDescription> _cameras = [];
   int _selectedCameraIndex = 0;
@@ -179,10 +181,15 @@ class _EnrollScreenState extends State<EnrollScreen> {
         // ------------------ GUIDE BOX CHECK ------------------
         if (!_isFaceInsideGuide(face, previewSize)) {
           stableFramesCount = 0;
-          setState(() => _isFaceAligned = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Keep your face inside the red box'))
-          );
+          // setState(() => _isFaceAligned = false);
+          setState(() {
+            _isFaceAligned = false;
+            _showMessage = true;
+            _alignmentMessage = 'Keep your face inside the red box';
+          });
+          // ScaffoldMessenger.of(context).showSnackBar(
+          //     SnackBar(content: Text('Keep your face inside the red box'))
+          // );
           await Future.delayed(Duration(milliseconds: 800));
           continue;
         }
@@ -190,7 +197,13 @@ class _EnrollScreenState extends State<EnrollScreen> {
         // Face is aligned, inside box
         stableFramesCount++;
         bestImage = image;
-        setState(() => _isFaceAligned = true);
+        // setState(() => _isFaceAligned = true);
+        setState(() {
+          _isFaceAligned = true;
+          _showMessage = false;
+
+          _alignmentMessage = ''; // Hide the message
+        });
         await Future.delayed(Duration(milliseconds: 500));
       }
 
@@ -279,6 +292,32 @@ class _EnrollScreenState extends State<EnrollScreen> {
               ],
             ),
           ),
+
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Container(
+              margin: EdgeInsets.only(top: 10), // reduced margin
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6), // reduced padding
+              height: 40, // minimal height to maintain space
+              decoration: BoxDecoration(
+                color: _showMessage && _alignmentMessage != ''
+                    ? Colors.red.withOpacity(0.85)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                _showMessage && _alignmentMessage != '' ? _alignmentMessage : '',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+
           // show member info above enroll button
           Padding(
             padding: const EdgeInsets.all(16.0),
@@ -288,7 +327,7 @@ class _EnrollScreenState extends State<EnrollScreen> {
                   widget.member.name,
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                Text("Tally No: ${widget.member.id}"),
+                Text("Member ID: ${widget.member.id}"),
                 SizedBox(height: 12),
                 ElevatedButton(
                   onPressed: _isProcessing ? null : _enrollStrict,

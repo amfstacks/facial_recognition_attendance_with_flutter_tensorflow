@@ -71,6 +71,7 @@ class ApiService {
           final normalized = _normalize(embedding);
           return {
             'member_id': e['member_id'],
+            'full_name': e['full_name'],
             'embedding': jsonEncode(normalized),
           };
         }).toList();
@@ -152,7 +153,7 @@ class ApiService {
 
 
 
-  Future<String?> recognizeFace(List<double> embedding) async {
+  Future<String?> recognizeFace_(List<double> embedding) async {
     final faces = await getFaces();
     double bestScore = 0;
     String? bestMatch;
@@ -161,15 +162,36 @@ class ApiService {
     for (var face in faces) {
       final storedEmbedding = jsonDecode(face['embedding']).cast<double>();
       final score = _cosineSimilarity(embedding, storedEmbedding);
-      if (score > 0.65 && score > bestScore) { // Tuned threshold
+      if (score > 0.85 && score > bestScore) { // Tuned threshold
         bestScore = score;
         bestMatch = face['member_id'];
       }
     }
     return bestMatch;
   }
+  Future<Map<String, dynamic>?> recognizeFace(List<double> embedding) async {
+    final faces = await getFaces();
+    double bestScore = 0;
+    Map<String, dynamic>? bestMatch;
 
-   Future<Map<String, dynamic>> recordAttendance(int memberId) async {
+    for (var face in faces) {
+      final storedEmbedding = jsonDecode(face['embedding']).cast<double>();
+      final score = _cosineSimilarity(embedding, storedEmbedding);
+
+      if (score > 0.85 && score > bestScore) {
+        bestScore = score;
+        bestMatch = {
+          'member_id': face['member_id'],
+          'full_name': face['full_name']
+        };
+      }
+    }
+
+    return bestMatch;
+  }
+
+
+  Future<Map<String, dynamic>> recordAttendance(int memberId) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl'),

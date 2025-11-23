@@ -166,7 +166,6 @@ class _TallyLookupScreenState extends State<TallyLookupScreen> {
                   "Search",
                   style: TextStyle(
                       fontSize: 17,
-                      color: Colors.white,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.5),
                 ),
@@ -261,18 +260,18 @@ class _TallyLookupScreenState extends State<TallyLookupScreen> {
             SizedBox(height: 40),
 
             // MARK ATTENDANCE BUTTON (BOTTOM)
-            // TextButton(
-            //   onPressed: () => Navigator.pushNamed(context, '/recognize'),
-            //   child: Text(
-            //     'Mark Attendance',
-            //     style: TextStyle(
-            //       fontSize: 16,
-            //       color: Colors.blueAccent.shade700,
-            //       fontWeight: FontWeight.w600,
-            //       decoration: TextDecoration.underline,
-            //     ),
-            //   ),
-            // ),
+            TextButton(
+              onPressed: () => Navigator.pushNamed(context, '/recognize'),
+              child: Text(
+                'Mark Attendance',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.blueAccent.shade700,
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
             SizedBox(height: 20),
           ],
         ),
